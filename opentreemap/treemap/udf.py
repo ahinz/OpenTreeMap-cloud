@@ -304,7 +304,7 @@ class UDFModelBase(ModelBase):
                 return orig(name)
             except Exception:
                 if name.startswith('udf:'):
-                    udf, udfname = name.split(':', 1)
+                    udfname = name[4:]
                     field, model, direct, m2m = orig('udf_scalar_values')
                     field = field.create_proxy_field(udfname)
                     return (field, model, direct, m2m)
