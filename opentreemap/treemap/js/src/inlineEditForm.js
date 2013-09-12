@@ -10,6 +10,9 @@ var $ = require('jquery'),
 // baconjs to jQuery
 require('./baconUtils');
 
+var eventsLandingInEditMode = ['edit:start', 'save:start', 'save:error'],
+    eventsLandingInDisplayMode = ['idle', 'save:ok', 'cancel'];
+
 exports.init = function(options) {
     var updateUrl = options.updateUrl,
         form = options.form,
@@ -33,6 +36,56 @@ exports.init = function(options) {
                     $('input[name="' + field + '"]').trigger('restore', $(el).val());
                 }
             });
+        },
+
+        applyIdsToNewUdfs = function(resp) {
+            _.each(resp.udfMap, function(dbid, refid) {
+                $("tr[data-ref-id='" + refid + "']").attr('data-value-id', dbid);
+            });
+
+            return resp;
+        },
+
+        resetCollectionUdfs = function() {
+            // Remove any not commited rows
+            $("table[data-udf-id] tr[data-value-id='']").remove();
+
+            // Hide the edit row
+            $("table[data-udf-id] .editrow").css('display', 'none');
+
+            // If there are no 'data' rows on a given table
+            // hide the header and show the placeholder
+            $("table[data-udf-id]").map(function() {
+                var $table = $(this);
+
+                // If the table has 3 rows they are:
+                // header
+                // edit row (hidden)
+                // placeholder row (hidden currently)
+                // This means there is no user data, so
+                // show the placeholder and hide the header
+                if ($table.find('tr').length === 3) {
+                    $table.find('.placeholder').css('display', '');
+                    $table.find('.headerrow').css('display', 'none');
+                } else {
+                    // We have some data rows so show the header
+                    // and not the placeholder
+                    $table.find('.placeholder').css('display', 'none');
+                    $table.find('.headerrow').css('display', '');
+                }
+            });
+        },
+
+        showCollectionUdfs = function() {
+            // By default collection udfs have their input row
+            // hidden, so show that row
+            $("table[data-udf-id] .editrow").css('display', '');
+
+            // The header row may also be hidden if there are no
+            // items so show that as well
+            $("table[data-udf-id] .headerrow").css('display', '');
+
+            $("table[data-udf-id] .placeholder").css('display', 'none');
         },
 
         displayValuesToFormFields = function() {
@@ -92,6 +145,38 @@ exports.init = function(options) {
 
         getDataToSave = function() {
             var data = FH.formToDictionary($(form), $(editFields));
+
+            // Fetch collection udfs as dictionaries and stuff them
+            // on the request under 'collections'
+            var collections = {};
+            $('table[data-udf-id]').map(function() {
+                var $table = $(this);
+                var id = $table.data('udf-id');
+
+                var headers = $table.find('tr.headerrow td')
+                        .map(function() {
+                            return $(this).html();
+                        });
+
+                collections[id] =
+                    _.map($table.find('tr[data-value-id]').toArray(),
+                          function(row) {
+                              var id = $(row).data('value-id');
+                              var refid = $(row).data('ref-id');
+                              var data = $(row)
+                                      .find('td')
+                                      .map(function() {
+                                          return $(this).html();
+                                      });
+
+                              var obj = _.object(headers, data);
+                              return {id: id,
+                                      ref: refid,
+                                      data: obj};
+                          });
+            });
+
+            data.collections = collections;
             onSaveBefore(data);
             return data;
         },
@@ -116,17 +201,19 @@ exports.init = function(options) {
             return action === 'edit:start';
         },
 
+        isEditCancel = function (action) {
+            return action === 'cancel';
+        },
+
         responseStream = saveStream
             .map(getDataToSave)
             .flatMap(update)
+            .map(applyIdsToNewUdfs)
             .mapError(function (e) {
                 return e.responseJSON;
             }),
 
         saveOkStream = responseStream.filter('.ok'),
-
-        eventsLandingInEditMode = ['edit:start', 'save:start', 'save:error'],
-        eventsLandingInDisplayMode = ['idle', 'save:ok', 'cancel'],
 
         hideAndShowElements = function (action) {
             function hideOrShow(fields, actions) {
@@ -165,6 +252,11 @@ exports.init = function(options) {
     );
 
     actionStream.filter(isEditStart).onValue(displayValuesToFormFields);
+    actionStream.filter(isEditStart).onValue(showCollectionUdfs);
+
+    actionStream
+        .filter(_.contains, eventsLandingInDisplayMode)
+        .onValue(resetCollectionUdfs);
 
     actionStream.onValue(hideAndShowElements);
 
@@ -176,4 +268,3 @@ exports.init = function(options) {
     exports.cancelStream = cancelStream;
     exports.updateUrl = updateUrl;
 };
-

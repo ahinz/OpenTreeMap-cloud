@@ -29,6 +29,8 @@ from treemap.audit import Audit
 from treemap.models import (Plot, Tree, User, Species, Instance,
                             BenefitCurrencyConversion)
 
+from treemap.udf import UserDefinedFieldDefinition, UserDefinedCollectionValue
+
 from ecobenefits.models import ITreeRegion
 from ecobenefits.views import _benefits_for_trees
 
@@ -231,6 +233,37 @@ def plot_detail(request, instance, plot_id, tree_id=None):
     return context
 
 
+def add_new_collection_udf(request, instance, udf_id, plot_id, tree_id=None):
+    plot = get_object_or_404(Plot, instance=instance)
+
+    if tree_id:
+        tree = get_object_or_404(Tree, instance=instance, plot=plot)
+
+        # Since they specified a tree id assume they want a tree udf
+        model_type = 'Tree'
+        model_id = tree_id
+    else:
+        # They didn't specify a tree so we assume it's a plot
+        model_type = 'Plot'
+        model_id = plot_id
+
+    udf = get_object_or_404(UserDefinedFieldDefinition,
+                            iscollection=True,
+                            pk=udf_id,
+                            model_type='Tree')
+
+    udf_value = UserDefinedCollectionValue(
+        field_definition=udf,
+        model_id=model_id)
+
+    new_values = json_from_request(request) or {}
+
+    udf_value.data = new_values
+    udf_value.save_with_user(request.user)
+
+    return HttpResponse('Added')
+
+
 def add_plot(request, instance):
     return update_plot_and_tree_request(request, Plot(instance=instance))
 
@@ -243,11 +276,12 @@ def update_plot_detail(request, instance, plot_id):
 
 def update_plot_and_tree_request(request, plot):
     try:
-        plot = update_plot_and_tree(request, plot)
+        plot, udf_map = update_plot_and_tree(request, plot)
         # Refresh plot.instance in case geo_rev_hash was updated
         plot.instance = Instance.objects.get(id=plot.instance.id)
         return {
             'ok': True,
+            'udfMap': udf_map,
             'geoRevHash': plot.instance.geo_rev_hash
         }
     except ValidationError as ve:
@@ -307,25 +341,91 @@ def update_plot_and_tree(request, plot):
     def get_tree():
         return plot.current_tree() or Tree(instance=plot.instance)
 
+    def process_udf_collection_update(plot, collections):
+        valid_udfs = {udf.pk: udf for udf in
+                      UserDefinedFieldDefinition.objects.filter(
+                          instance=plot.instance)}
+
+        ref_id_to_pk_map = {}
+
+        for udf_id, values in collections.iteritems():
+            udf_id = int(udf_id)
+
+            if udf_id not in valid_udfs:
+                raise Exception('Invalid UDF')
+
+            udf = valid_udfs[udf_id]
+
+            if udf.model_type == 'Plot':
+                model_id = plot.pk
+            else:
+                model_id = plot.current_tree().pk
+
+            keys_found = []
+
+            for value in values:
+                ref = value.get('ref', None)
+                pk = value.get('id', None)
+                data = value.get('data', None)
+
+                if data is None:
+                    raise Exception('no data sent for UDF')
+
+                if pk:
+                    udf_value = UserDefinedCollectionValue.objects.get(
+                        pk=pk,
+                        field_definition=udf,
+                        model_id=model_id)
+                else:
+                    udf_value = UserDefinedCollectionValue(
+                        field_definition=udf,
+                        model_id=model_id)
+
+                udf_value.data = data
+                udf_value.save_with_user(request.user)
+
+                if ref:
+                    ref_id_to_pk_map[ref] = udf_value.pk
+
+                keys_found.append(udf_value.pk)
+
+            # Delete any values not mentioned
+            to_be_deleted = UserDefinedCollectionValue\
+                .objects\
+                .exclude(pk__in=keys_found)\
+                .filter(field_definition=udf,
+                        model_id=model_id)
+
+            for udf_value in to_be_deleted:
+                udf_value.delete_with_user(request.user)
+
+        return ref_id_to_pk_map
+
+
     tree = None
 
     request_dict = json.loads(request.body)
 
+    udf_ref_id_to_pk_map = {}
+
     for (model_and_field, value) in request_dict.iteritems():
-        model, field = split_model_or_raise(model_and_field)
-
-        if model == 'plot':
-            model = plot
-        elif model == 'tree':
-            # Get the tree or spawn a new one if needed
-            tree = tree or get_tree()
-            model = tree
-            if field == 'species' and value:
-                value = Species.objects.get(pk=value)
+        if model_and_field == 'collections':
+            udf_ref_id_to_pk_map = process_udf_collection_update(plot, value)
         else:
-            raise Exception('Malformed request - invalid model %s' % model)
+            model, field = split_model_or_raise(model_and_field)
 
-        set_attr_on_model(model, field, value)
+            if model == 'plot':
+                model = plot
+            elif model == 'tree':
+                # Get the tree or spawn a new one if needed
+                tree = tree or get_tree()
+                model = tree
+                if field == 'species' and value:
+                    value = Species.objects.get(pk=value)
+            else:
+                raise Exception('Malformed request - invalid model %s' % model)
+
+            set_attr_on_model(model, field, value)
 
     errors = {}
 
@@ -338,7 +438,7 @@ def update_plot_and_tree(request, plot):
     if errors:
         raise ValidationError(errors)
 
-    return plot
+    return plot, udf_ref_id_to_pk_map
 
 
 def _get_audits(logged_in_user, instance, query_vars, user, models,
@@ -760,6 +860,8 @@ get_plot_detail_view = instance_request(etag(_plot_hash)(
     render_template('treemap/plot_detail.html', plot_detail)))
 
 update_plot_detail_view = json_api_call(instance_request(update_plot_detail))
+
+add_new_collection_udf_view = instance_request(add_new_collection_udf)
 
 plot_popup_view = instance_request(etag(_plot_hash)(
     render_template('treemap/plot_popup.html', plot_detail)))

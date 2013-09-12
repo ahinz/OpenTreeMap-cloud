@@ -108,12 +108,19 @@ def add_all_permissions_on_model_to_role(
 
     Specifiy an instance to grab UDFs as well
     """
+    from udf import UserDefinedFieldDefinition
+
     mobj = Model()
     if instance:
         mobj.instance = instance
 
     model_name = mobj._model_name
-    model_fields = mobj.tracked_fields
+    udfs = [udf.canonical_name for udf in
+            UserDefinedFieldDefinition.objects.filter(
+                instance=instance, model_type=model_name)]
+
+    model_fields = set(mobj.tracked_fields + udfs)
+
     for field_name in model_fields:
         FieldPermission.objects.get_or_create(
             model_name=model_name,

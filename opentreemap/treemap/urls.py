@@ -13,7 +13,8 @@ from treemap.views import (boundary_to_geojson_view, index_view, map_view,
                            boundary_autocomplete_view, instance_user_view,
                            plot_popup_view, instance_user_audits,
                            plot_accordion_view, add_plot_view,
-                           add_tree_photo_endpoint)
+                           add_tree_photo_endpoint,
+                           add_new_collection_udf_view)
 
 # Testing notes:
 # We want to test that every URL succeeds (200) or fails with bad data (404).
@@ -32,6 +33,8 @@ urlpatterns = patterns(
     url(r'^plots/(?P<plot_id>\d+)/$',
         route(GET=get_plot_detail_view, PUT=update_plot_detail_view),
         name='plot_detail'),
+    url(r'^plots/(?P<plot_id>\d+)/(trees/(?P<tree_id>\d+)/)?udf/(?P<udf_id>\d+)/$',
+        route(POST=add_new_collection_udf_view)),
     url(r'^plots/(?P<plot_id>\d+)/trees/(?P<tree_id>\d+)/$',
         route(GET=get_plot_detail_view, PUT=update_plot_detail_view),
         name='tree_detail'),

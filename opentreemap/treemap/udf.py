@@ -241,6 +241,7 @@ class UserDefinedFieldDefinition(models.Model):
 
         existing_objects = UserDefinedFieldDefinition.objects.filter(
             model_type=model_type,
+            instance=self.instance,
             name=self.name)
 
         if existing_objects.count() != 0:
@@ -664,6 +665,20 @@ class UDFModel(UserTrackable, models.Model):
         model_name = self.__class__.__name__.lower()
         return [(field.name, model_name + ".udf:" + field.name)
                 for field in self.get_user_defined_fields()]
+
+    @property
+    def scalar_udf_names_and_fields(self):
+        model_name = self.__class__.__name__.lower()
+        return [(field.name, model_name + ".udf:" + field.name)
+                for field in self.get_user_defined_fields()
+                if not field.iscollection]
+
+    @property
+    def collection_udf_names_and_fields(self):
+        model_name = self.__class__.__name__.lower()
+        return [(field.name, model_name + ".udf:" + field.name)
+                for field in self.get_user_defined_fields()
+                if field.iscollection]
 
     @property
     def scalar_udf_field_names(self):
