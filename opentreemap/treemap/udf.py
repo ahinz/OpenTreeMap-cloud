@@ -551,6 +551,7 @@ class UDFDictionary(HStoreDictionary):
         udf = self._get_udf_or_error(key)
 
         if udf.iscollection:
+            self.instance.dirty_collection_udfs = True
             self.collection_fields[key] = val
         else:
             val = udf.reverse_clean(val)
@@ -623,6 +624,13 @@ class UDFModel(UserTrackable, models.Model):
         super(UDFModel, self).__init__(*args, **kwargs)
         self._do_not_track.add('udfs')
         self.populate_previous_state()
+
+        self.dirty_collection_udfs = False
+
+    def fields_were_updated(self):
+        normal_fields = super(UDFModel, self).fields_were_updated()
+
+        return normal_fields or self.dirty_collection_udfs
 
     def get_user_defined_fields(self):
         udfs = UserDefinedFieldDefinition.objects.filter(
@@ -744,6 +752,8 @@ class UDFModel(UserTrackable, models.Model):
                  .delete()
 
         super(UDFModel, self).save_with_user(user, *args, **kwargs)
+
+        self.dirty_collection_udfs = False
 
     def clean_udfs(self):
         errors = {}
