@@ -13,8 +13,7 @@ from treemap.views import (boundary_to_geojson_view, index_view, map_view,
                            boundary_autocomplete_view, instance_user_view,
                            plot_popup_view, instance_user_audits,
                            plot_accordion_view, add_plot_view,
-                           add_tree_photo_endpoint,
-                           add_new_collection_udf_view)
+                           add_tree_photo_endpoint)
 
 # Testing notes:
 # We want to test that every URL succeeds (200) or fails with bad data (404).

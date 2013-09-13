@@ -2,7 +2,7 @@
 
 <div>
   <h2>{{ udf.name }}</h2>
-  <table data-udf-id="{{ udf.pk }}">
+  <table data-udf-id="{{ udf.pk }}" data-udf-name="{{ udf.model_type.lower }}.{{ udf.canonical_name }}">
     <tr class="headerrow" style="{{ udf.userdefinedcollectionvalue_set.all|default:"display:none" }}">
       {% for field in udf.datatype_dict %}
       <td>{{ field.name }}</td>

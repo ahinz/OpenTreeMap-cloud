@@ -245,12 +245,11 @@ def update_plot_detail(request, instance, plot_id):
 
 def update_plot_and_tree_request(request, plot):
     try:
-        plot, udf_map = update_plot_and_tree(request, plot)
+        plot = update_plot_and_tree(request, plot)
         # Refresh plot.instance in case geo_rev_hash was updated
         plot.instance = Instance.objects.get(id=plot.instance.id)
         return {
             'ok': True,
-            'udfMap': udf_map,
             'geoRevHash': plot.instance.geo_rev_hash
         }
     except ValidationError as ve:
@@ -293,7 +292,7 @@ def update_plot_and_tree(request, plot):
             if udf_name in [field.name
                             for field
                             in model.get_user_defined_fields()]:
-                model.apply_change(attr[4:], val)
+                model.udfs[udf_name] = val
             else:
                 raise KeyError('Invalid UDF %s' % attr)
         else:
@@ -310,91 +309,25 @@ def update_plot_and_tree(request, plot):
     def get_tree():
         return plot.current_tree() or Tree(instance=plot.instance)
 
-    def process_udf_collection_update(plot, collections):
-        valid_udfs = {udf.pk: udf for udf in
-                      UserDefinedFieldDefinition.objects.filter(
-                          instance=plot.instance)}
-
-        ref_id_to_pk_map = {}
-
-        for udf_id, values in collections.iteritems():
-            udf_id = int(udf_id)
-
-            if udf_id not in valid_udfs:
-                raise Exception('Invalid UDF')
-
-            udf = valid_udfs[udf_id]
-
-            if udf.model_type == 'Plot':
-                model_id = plot.pk
-            else:
-                model_id = plot.current_tree().pk
-
-            keys_found = []
-
-            for value in values:
-                ref = value.get('ref', None)
-                pk = value.get('id', None)
-                data = value.get('data', None)
-
-                if data is None:
-                    raise Exception('no data sent for UDF')
-
-                if pk:
-                    udf_value = UserDefinedCollectionValue.objects.get(
-                        pk=pk,
-                        field_definition=udf,
-                        model_id=model_id)
-                else:
-                    udf_value = UserDefinedCollectionValue(
-                        field_definition=udf,
-                        model_id=model_id)
-
-                udf_value.data = data
-                udf_value.save_with_user(request.user)
-
-                if ref:
-                    ref_id_to_pk_map[ref] = udf_value.pk
-
-                keys_found.append(udf_value.pk)
-
-            # Delete any values not mentioned
-            to_be_deleted = UserDefinedCollectionValue\
-                .objects\
-                .exclude(pk__in=keys_found)\
-                .filter(field_definition=udf,
-                        model_id=model_id)
-
-            for udf_value in to_be_deleted:
-                udf_value.delete_with_user(request.user)
-
-        return ref_id_to_pk_map
-
-
     tree = None
 
     request_dict = json.loads(request.body)
 
-    udf_ref_id_to_pk_map = {}
-
     for (model_and_field, value) in request_dict.iteritems():
-        if model_and_field == 'collections':
-            udf_ref_id_to_pk_map = process_udf_collection_update(plot, value)
+        model, field = split_model_or_raise(model_and_field)
+
+        if model == 'plot':
+            model = plot
+        elif model == 'tree':
+            # Get the tree or spawn a new one if needed
+            tree = tree or get_tree()
+            model = tree
+            if field == 'species' and value:
+                value = Species.objects.get(pk=value)
         else:
-            model, field = split_model_or_raise(model_and_field)
+            raise Exception('Malformed request - invalid model %s' % model)
 
-            if model == 'plot':
-                model = plot
-            elif model == 'tree':
-                # Get the tree or spawn a new one if needed
-                tree = tree or get_tree()
-                model = tree
-                if field == 'species' and value:
-                    value = Species.objects.get(pk=value)
-            else:
-                raise Exception('Malformed request - invalid model %s' % model)
-
-            set_attr_on_model(model, field, value)
+        set_attr_on_model(model, field, value)
 
     errors = {}
 
@@ -407,7 +340,7 @@ def update_plot_and_tree(request, plot):
     if errors:
         raise ValidationError(errors)
 
-    return plot, udf_ref_id_to_pk_map
+    return plot
 
 
 def _get_audits(logged_in_user, instance, query_vars, user, models,
