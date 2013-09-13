@@ -233,37 +233,6 @@ def plot_detail(request, instance, plot_id, tree_id=None):
     return context
 
 
-def add_new_collection_udf(request, instance, udf_id, plot_id, tree_id=None):
-    plot = get_object_or_404(Plot, instance=instance)
-
-    if tree_id:
-        tree = get_object_or_404(Tree, instance=instance, plot=plot)
-
-        # Since they specified a tree id assume they want a tree udf
-        model_type = 'Tree'
-        model_id = tree_id
-    else:
-        # They didn't specify a tree so we assume it's a plot
-        model_type = 'Plot'
-        model_id = plot_id
-
-    udf = get_object_or_404(UserDefinedFieldDefinition,
-                            iscollection=True,
-                            pk=udf_id,
-                            model_type='Tree')
-
-    udf_value = UserDefinedCollectionValue(
-        field_definition=udf,
-        model_id=model_id)
-
-    new_values = json_from_request(request) or {}
-
-    udf_value.data = new_values
-    udf_value.save_with_user(request.user)
-
-    return HttpResponse('Added')
-
-
 def add_plot(request, instance):
     return update_plot_and_tree_request(request, Plot(instance=instance))
 
@@ -860,8 +829,6 @@ get_plot_detail_view = instance_request(etag(_plot_hash)(
     render_template('treemap/plot_detail.html', plot_detail)))
 
 update_plot_detail_view = json_api_call(instance_request(update_plot_detail))
-
-add_new_collection_udf_view = instance_request(add_new_collection_udf)
 
 plot_popup_view = instance_request(etag(_plot_hash)(
     render_template('treemap/plot_popup.html', plot_detail)))

@@ -396,7 +396,7 @@ class UserDefinedFieldDefinition(models.Model):
                                       {'fieldname': self.name})
 
         elif datatype == 'date':
-            return datetime.strptime(value, DATETIME_FORMAT)
+            return datetime.strptime(value.strip(), DATETIME_FORMAT)
         elif datatype == 'choice':
             if value in datatype_dict['choices']:
                 return value
@@ -702,7 +702,7 @@ class UDFModel(UserTrackable, models.Model):
     def save_with_user(self, user, *args, **kwargs):
         """
         Saving a UDF model now involves saving all of collection-based
-        udf fields, we do there here. They are valided in
+        udf fields, we do there here. They are validated in
         "clean_collection_udfs"
         """
         collection_values = self.udfs.collection_fields

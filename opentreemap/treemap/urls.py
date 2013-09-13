@@ -33,8 +33,6 @@ urlpatterns = patterns(
     url(r'^plots/(?P<plot_id>\d+)/$',
         route(GET=get_plot_detail_view, PUT=update_plot_detail_view),
         name='plot_detail'),
-    url(r'^plots/(?P<plot_id>\d+)/(trees/(?P<tree_id>\d+)/)?udf/(?P<udf_id>\d+)/$',
-        route(POST=add_new_collection_udf_view)),
     url(r'^plots/(?P<plot_id>\d+)/trees/(?P<tree_id>\d+)/$',
         route(GET=get_plot_detail_view, PUT=update_plot_detail_view),
         name='tree_detail'),
