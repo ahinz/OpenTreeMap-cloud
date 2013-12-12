@@ -302,3 +302,4 @@ DOUBLE_CLICK_INTERVAL = 300
 IE_VERSION_MINIMUM = 9 if DEBUG else 10
 
 IE_VERSION_UNSUPPORTED_REDIRECT_PATH = '/unsupported'
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.PickleSerializer'
