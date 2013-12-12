@@ -858,7 +858,7 @@ class UDFWhereNode(GeoWhereNode):
 
         return None
 
-    def sql_for_columns(self, lvalue, qn, connection):
+    def sql_for_columns(self, lvalue, qn, connection, internal_type=None):
         """
         Most of the interesting stuff happens here. In particular,
         this method checks if the field is a udf, and if so
@@ -887,7 +887,8 @@ class UDFWhereNode(GeoWhereNode):
             return accessor
         else:
             return super(UDFWhereNode, self)\
-                .sql_for_columns(lvalue, qn, connection)
+                .sql_for_columns(lvalue, qn, connection,
+                                 interal_type=None)
 
     def udf_sql_type(self, thing):
         """
